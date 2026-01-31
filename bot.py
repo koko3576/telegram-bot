@@ -1,74 +1,46 @@
 import os
-import logging
+from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import openai
 
-# -----------------------------
-# LOGGING
-# -----------------------------
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# Carica le variabili dal file .env
+load_dotenv()
 
-# -----------------------------
-# VARIABILI D'AMBIENTE
-# -----------------------------
+# Leggi le chiavi dalle variabili d'ambiente
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-OWNER_ID = int(os.environ.get("OWNER_ID", 0))  # opzionale, 0 = nessun filtro
 
 if not TOKEN or not OPENAI_API_KEY:
     raise ValueError("Assicurati che TELEGRAM_TOKEN e OPENAI_API_KEY siano impostati")
 
+# Inizializza OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# -----------------------------
-# HANDLER COMANDI
-# -----------------------------
+# Funzione per i comandi di start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if OWNER_ID and update.effective_user.id != OWNER_ID:
-        return  # ignora messaggi non autorizzati
-    await update.message.reply_text("Ciao! Sono il tuo bot basato su OpenAI.")
+    await update.message.reply_text("Ciao! Sono pronto a rispondere ai tuoi messaggi.")
 
-# -----------------------------
-# HANDLER MESSAGGI
-# -----------------------------
+# Funzione per gestire i messaggi testuali
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if OWNER_ID and update.effective_user.id != OWNER_ID:
-        return  # ignora messaggi non autorizzati
+    user_message = update.message.text
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": user_message}]
+    )
+    reply = response.choices[0].message.content
+    await update.message.reply_text(reply)
 
-    user_text = update.message.text
-
-    # Chiamata a OpenAI ChatGPT
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": user_text}],
-            temperature=0.7
-        )
-        answer = response.choices[0].message.content
-    except Exception as e:
-        logger.error(f"Errore OpenAI: {e}")
-        answer = "Si è verificato un errore nella richiesta a OpenAI."
-
-    await update.message.reply_text(answer)
-
-# -----------------------------
-# MAIN
-# -----------------------------
 def main():
+    # Costruisci l'applicazione Telegram
     app = Application.builder().token(TOKEN).build()
 
-    # Comando /start
+    # Handlers
     app.add_handler(CommandHandler("start", start))
-
-    # Messaggi di testo
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Avvia il bot
     app.run_polling()
 
-
-
+if __name__ == "__main__":
+    main()
