@@ -3,32 +3,42 @@ import openai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Prendi token dal Render environment
+# Variabili d'ambiente
 TOKEN = os.environ["TELEGRAM_TOKEN"]
-OPENAI_KEY = os.environ["OPENAI_KEY"]
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+OWNER_ID = int(os.environ.get("OWNER_ID", 0))  # opzionale
 
-openai.api_key = OPENAI_KEY
+# Configura OpenAI
+openai.api_key = OPENAI_API_KEY
 
-# Funzione start
+# Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Ciao! Sono il tuo bot IA. Scrivi qualcosa e ti risponderò.")
+    await update.message.reply_text("Ciao! Mandami un messaggio e ti risponderò usando OpenAI!")
 
-# Funzione per messaggi generici
+# Comando /help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("/start - Avvia il bot\n/help - Mostra comandi")
+
+# Funzione per rispondere ai messaggi
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = update.message.text
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=150
-    )
-    answer = response.choices[0].message.content
-    await update.message.reply_text(answer)
+    user_message = update.message.text
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": user_message}]
+        )
+        reply = response['choices'][0]['message']['content']
+    except Exception as e:
+        reply = f"Errore: {e}"
+    await update.message.reply_text(reply)
 
-# Main
 def main():
     app = Application.builder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
+
     app.run_polling()
 
 if __name__ == "__main__":
