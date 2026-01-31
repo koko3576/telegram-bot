@@ -1,24 +1,23 @@
 import os
 import logging
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 import openai
 
 # -----------------------------
-# Logging
+# LOGGING
 # -----------------------------
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
 # -----------------------------
-# Variabili ambiente
+# VARIABILI D'AMBIENTE
 # -----------------------------
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-OWNER_ID = int(os.environ.get("OWNER_ID", 0))  # ID Telegram autorizzato (0 = nessun controllo)
+OWNER_ID = int(os.environ.get("OWNER_ID", 0))  # opzionale, 0 = nessun filtro
 
 if not TOKEN or not OPENAI_API_KEY:
     raise ValueError("Assicurati che TELEGRAM_TOKEN e OPENAI_API_KEY siano impostati")
@@ -26,39 +25,44 @@ if not TOKEN or not OPENAI_API_KEY:
 openai.api_key = OPENAI_API_KEY
 
 # -----------------------------
-# Comandi
+# HANDLER COMANDI
 # -----------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if OWNER_ID and update.effective_user.id != OWNER_ID:
-        return
-    await update.message.reply_text("Ciao! Scrivi qualcosa e ti risponderò usando OpenAI.")
+        return  # ignora messaggi non autorizzati
+    await update.message.reply_text("Ciao! Sono il tuo bot basato su OpenAI.")
 
-async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# -----------------------------
+# HANDLER MESSAGGI
+# -----------------------------
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if OWNER_ID and update.effective_user.id != OWNER_ID:
-        return
+        return  # ignora messaggi non autorizzati
 
-    user_message = update.message.text
+    user_text = update.message.text
+
+    # Chiamata a OpenAI ChatGPT
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": user_message}]
+            messages=[{"role": "user", "content": user_text}],
+            temperature=0.7
         )
-        reply = response['choices'][0]['message']['content']
+        answer = response.choices[0].message.content
     except Exception as e:
-        reply = f"Errore: {e}"
+        logger.error(f"Errore OpenAI: {e}")
+        answer = "Si è verificato un errore nella richiesta a OpenAI."
 
-    await update.message.reply_text(reply)
+    await update.message.reply_text(answer)
 
 # -----------------------------
-# Main
+# MAIN
 # -----------------------------
 def main():
     app = Application.builder().token(TOKEN).build()
 
+    # Comandi
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
 
-    app.run_polling()  # NO Updater, solo polling
-
-if __name__ == "__main__":
-    main()
+    # Messaggi
+    app.add_handler(MessageHandler(filt_
