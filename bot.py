@@ -4,8 +4,8 @@ import random
 import os
 
 # Prende variabili da Render
-TOKEN = os.environ["8098876870:AAHLOOJ-SftED23Mnk0_MYLMh0iqcX5U0Aw"]
-OWNER_ID = int(os.environ["7399537812"])
+TOKEN = os.environ["BOT_TOKEN"]
+OWNER_ID = int(os.environ["OWNER_ID"])
 
 # Risposte base da assistente
 responses = [
@@ -39,3 +39,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
