@@ -1,101 +1,65 @@
 import os
 import json
-import random
 from telegram import Update
-from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
+from telegram.ext import Application, MessageHandler, CommandHandler, ContextTypes, filters
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
-# Variabili d'ambiente
+# Legge variabili d'ambiente
 TOKEN = os.environ["BOT_TOKEN"]
 OWNER_ID = int(os.environ["OWNER_ID"])
 
-# Carica modello leggero IA
-model_name = "distilgpt2"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
-
-# File per memoria
+# Carica memoria
 MEMORY_FILE = "memory.json"
-
-# Carica memoria esistente
 if os.path.exists(MEMORY_FILE):
     with open(MEMORY_FILE, "r") as f:
         memory = json.load(f)
 else:
     memory = {}
 
-# Funzione generazione risposta IA
-def generate_response(user_input):
-    inputs = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors="pt")
-    outputs = model.generate(inputs, max_length=150, pad_token_id=tokenizer.eos_token_id)
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+# Modello leggero per free instance
+MODEL_NAME = "microsoft/DialoGPT-small"
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
 
-# Funzione salva memoria
-def save_memory():
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    text = update.message.text
+
+    # Solo risponde all'owner
+    if int(user_id) != OWNER_ID:
+        return
+
+    # Recupera la memoria dell'utente
+    history = memory.get(user_id, [])
+    history.append(text)
+
+    # Genera risposta
+    input_ids = tokenizer.encode(text + tokenizer.eos_token, return_tensors="pt")
+    chat_history_ids = model.generate(input_ids, max_length=100, pad_token_id=tokenizer.eos_token_id)
+    reply = tokenizer.decode(chat_history_ids[:, input_ids.shape[-1]:][0], skip_special_tokens=True)
+
+    # Salva risposta in memoria
+    history.append(reply)
+    memory[user_id] = history
     with open(MEMORY_FILE, "w") as f:
         json.dump(memory, f)
 
-# Comando /reset
-async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id != OWNER_ID:
-        return
-    memory.clear()
-    save_memory()
-    await update.message.reply_text("✅ Memoria cancellata!")
+    await update.message.reply_text(reply)
 
-# Comando /riassunto
-async def riassunto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id != OWNER_ID:
-        return
-    if not memory:
-        await update.message.reply_text("📂 Nessuna memoria da riassumere.")
-        return
-    summary = "\n".join([f"{k}: {v}" for k, v in memory.items()])
-    await update.message.reply_text(f"📝 Riassunto memoria:\n{summary}")
+# Comandi extra
+async def reset_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    if int(user_id) == OWNER_ID:
+        memory[user_id] = []
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(memory, f)
+        await update.message.reply_text("✅ Memoria resettata!")
 
-# Comando /studio
-async def studio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id != OWNER_ID:
-        return
-    await update.message.reply_text("📚 Scrivi il testo di studio e lo terrò a mente!")
+# Setup bot
+app = Application.builder().token(TOKEN).build()
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+app.add_handler(CommandHandler("reset", reset_memory))
 
-# Funzione messaggi generici
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id != OWNER_ID:
-        return
-    
-    text = update.message.text
-    
-    # Aggiorna memoria
-    memory[text] = generate_response(text)
-    save_memory()
-    
-    # Risposta IA
-    response = memory[text]
-    
-    # Saluto personalizzato casuale
-    greetings = ["🤖 Eccomi!", "💡 Ti ascolto!", "😎 Dimmi pure!"]
-    await update.message.reply_text(f"{random.choice(greetings)} {response}")
-
-# Main
-def main():
-    app = Application.builder().token(TOKEN).build()
-    
-    # Comandi
-    app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(CommandHandler("riassunto", riassunto))
-    app.add_handler(CommandHandler("studio", studio))
-    
-    # Messaggi generici
-    app.add_handler(MessageHandler(filters.TEXT, handle_message))
-    
-    print("🤖 Bot avviato...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+print("🤖 Bot avviato...")
+app.run_polling()
