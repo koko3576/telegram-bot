@@ -65,4 +65,6 @@ def main():
     app.add_handler(CommandHandler("start", start))
 
     # Messaggi
-    app.add_handler(MessageHandler(filt_
+   app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.run_polling()
+
